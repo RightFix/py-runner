@@ -1,5 +1,9 @@
 # py-runner
 
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
+[![Python >=3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](pyproject.toml)
+[![TestPyPI](https://img.shields.io/badge/TestPyPI-py--runner-green.svg)](https://test.pypi.org/project/py-runner/)
+
 Persistent Python code runner: **string in, JSON out**. A lightweight,
 dependency-free, ipykernel-like execution library — no Jupyter server, no ZMQ,
 no required third-party packages.
@@ -68,6 +72,27 @@ py-runner -c "print(2 + 3)"
 py-runner analysis.py --timeout 300 > result.json
 cat cell.py | py-runner
 python -m py_runner -c "1+1"
+```
+
+## Project structure
+
+```text
+src/py_runner/
+├── __init__.py   # public API: Kernel, execute, execute_json, reset, main
+├── kernel.py     # persistent execution kernel (threaded, timeouts, input)
+├── magics.py     # %time, %pip, !shell, … (sandbox-flaggable)
+├── display.py    # rich display collector (pandas/numpy/PIL/matplotlib)
+├── streams.py    # thread-routed streaming stdout, tqdm \r handling
+└── utils.py      # guarded imports, address-space limit helper
+```
+
+## Development
+
+```bash
+uv sync            # create .venv
+uv run python -c "from py_runner import execute; print(execute('1+1'))"
+uv build           # wheel + sdist in dist/
+uv publish --publish-url https://test.pypi.org/legacy/  # trial run
 ```
 
 ## License
