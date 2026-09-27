@@ -3,6 +3,13 @@
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![Python >=3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](pyproject.toml)
 [![TestPyPI](https://img.shields.io/badge/TestPyPI-py--runner-green.svg)](https://test.pypi.org/project/py-runner/)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://rightfix.github.io/py-runner-docs/)
+
+Persistent Python code runner: **string in, JSON out**. A lightweight,
+dependency-free, ipykernel-like execution library — no Jupyter server, no ZMQ,
+no required third-party packages.
+
+📖 **Full documentation: https://rightfix.github.io/py-runner-docs/**
 
 Persistent Python code runner: **string in, JSON out**. A lightweight,
 dependency-free, ipykernel-like execution library — no Jupyter server, no ZMQ,
