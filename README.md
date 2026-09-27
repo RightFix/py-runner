@@ -22,11 +22,11 @@ print(k.execute("x + 1"))
 ## Install
 
 ```bash
-pip install py-runner
+pip install py-runner-kernel
 # Opt-in stacks (core stays dependency-free):
-pip install "py-runner[data]"   # pandas, numpy, matplotlib, pillow, tqdm
-pip install "py-runner[ml]"     # scikit-learn, torch
-pip install "py-runner[full]"   # everything incl. opencv, plotly
+pip install "py-runner-kernel[data]"   # pandas, numpy, matplotlib, pillow, tqdm
+pip install "py-runner-kernel[ml]"     # scikit-learn, torch
+pip install "py-runner-kernel[full]"   # everything incl. opencv, plotly
 ```
 
 Requires Python >= 3.10.
@@ -77,7 +77,7 @@ python -m py_runner -c "1+1"
 ## Project structure
 
 ```text
-src/py_runner/
+py_runner/
 ├── __init__.py   # public API: Kernel, execute, execute_json, reset, main
 ├── kernel.py     # persistent execution kernel (threaded, timeouts, input)
 ├── magics.py     # %time, %pip, !shell, … (sandbox-flaggable)
