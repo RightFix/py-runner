@@ -23,13 +23,9 @@ print(k.execute("x + 1"))
 
 ```bash
 pip install py-runner-kernel
-# Opt-in stacks (core stays dependency-free):
-pip install "py-runner-kernel[data]"   # pandas, numpy, matplotlib, pillow, tqdm
-pip install "py-runner-kernel[ml]"     # scikit-learn, torch
-pip install "py-runner-kernel[full]"   # everything incl. opencv, plotly
 ```
 
-Requires Python >= 3.10.
+Requires Python >= 3.10. Zero runtime dependencies.
 
 ## Quickstart
 
@@ -94,6 +90,28 @@ uv run python -c "from py_runner import execute; print(execute('1+1'))"
 uv build           # wheel + sdist in dist/
 uv publish --publish-url https://test.pypi.org/legacy/  # trial run
 ```
+
+## HTTP server
+
+```bash
+py-runner-serve --host 127.0.0.1 --port 8000 --max-sessions 100
+```
+
+```bash
+S=$(curl -s -X POST localhost:8000/sessions | python3 -c "import sys,json; print(json.load(sys.stdin)['session_id'])")
+curl -s -X POST localhost:8000/execute \
+  -d "{\"session_id\":\"$S\",\"code\":\"x = 40 + 2\"}"
+curl -s -X POST localhost:8000/execute \
+  -d "{\"session_id\":\"$S\",\"code\":\"x + 1\"}"        # display: 43 (state kept)
+curl -s -X POST localhost:8000/interrupt \
+  -d "{\"session_id\":\"$S\"}"
+curl -s localhost:8000/sessions                          # list live sessions
+curl -s -X DELETE localhost:8000/sessions/$S             # destroy session
+```
+
+Sessions are server-generated UUIDs, live until deleted (no idle timeout),
+and isolated per ID. Kernels default to `allow_shell=false, allow_pip=false`;
+pass `{"allow_shell": true}` to `POST /sessions` to relax per session.
 
 ## License
 
