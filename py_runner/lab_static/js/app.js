@@ -4,6 +4,40 @@ import { toOutputs } from './outputs.js';
 import { state, $, cellSource } from './state.js';
 import { ensureSession, interruptSession } from './session.js';
 import { refreshFiles, fetchNotebook, saveNotebook, searchNotebooks, renderSearchResults } from './files.js';
+import { LspClient } from './lsp.js';
+import { refreshLspDiagnostics } from './vendor/cm.js';
+
+var lspSeq = 0;
+
+function uriFor(cell) {
+  if (!cell._lsp) cell._lsp = 'untitled:cell-' + (++lspSeq) + '.py';
+  return cell._lsp;
+}
+
+/* One LSP connection per open notebook; null when unavailable. */
+async function ensureLsp() {
+  if (state.lsp !== undefined) return state.lsp;
+  state.lsp = null;
+  try {
+    var st = await api('GET', '/lsp-status');
+    if (!st.available) return null;
+    var wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/lsp';
+    var client = LspClient(wsUrl);
+    await client.initialize(st.rootUri);
+    client.onDiagnostics(function (p) {
+      refreshLspDiagnostics(p.uri, p.diagnostics);
+    });
+    state.lsp = client;
+  } catch (e) {
+    state.lsp = null;
+  }
+  return state.lsp;
+}
+
+function lspFor(i) {
+  if (!state.lsp || !state.nb || !state.nb.cells[i]) return null;
+  return { client: state.lsp, uri: uriFor(state.nb.cells[i]) };
+}
 import { renderCells } from './cells.js';
 
 function markDirty() {
@@ -17,6 +51,7 @@ function draw() {
     running: state.running,
     onRun: runCell,
     onInterrupt: interrupt,
+    lspFor: lspFor,
     onDelete: function (i) {
       if (!confirm('Delete cell?')) return;
       state.nb.cells.splice(i, 1);
@@ -50,14 +85,17 @@ function setToolbar(on) {
 
 async function openNotebook(path) {
   if (state.dirty && !confirm('Discard unsaved changes?')) return;
+  if (state.lsp) { try { state.lsp.close(); } catch (e) { /* ignore */ } }
   var nb = await fetchNotebook(path);
   state.path = path;
   state.nb = nb;
   state.session = null;
+  state.lsp = undefined;
   state.dirty = false;
   $('filename').textContent = path.split('/').pop();
   setToolbar(true);
   draw();
+  ensureLsp().then(draw, draw);
 }
 
 async function runCell(i) {

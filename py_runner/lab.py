@@ -8,16 +8,23 @@ files are served from ``--dir`` with a traversal guard. Standard library only.
 import json
 import os
 import shutil
+import socket
+import struct
 import subprocess
 import sys
+import threading
+from base64 import b64encode
+from hashlib import sha1
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
 
 from .server import (
-    Handler as KernelHandler,
-    SessionRegistry,
     MAX_BODY_BYTES,
+    SessionRegistry,
     _serve_dual_stack,
+)
+from .server import (
+    Handler as KernelHandler,
 )
 
 
@@ -41,6 +48,203 @@ def find_lsp():
 
 
 LSP_ARGV = find_lsp()
+
+
+# ── LSP hub: one pylsp process shared by all browser tabs ────────────────
+# stdio LSP frames are multiplexed here: request ids are rewritten to a
+# global namespace so concurrent notebooks share one ~100MB server instead
+# of one each. stdlib only (raw WebSocket framing over the hijacked socket).
+
+_WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+
+def _ws_accept(key: str) -> str:
+    return b64encode(sha1((key + _WS_GUID).encode()).digest()).decode()
+
+
+def _ws_send(sock, payload: bytes, opcode: int = 0x1) -> None:
+    header = bytes([0x80 | opcode])
+    n = len(payload)
+    if n < 126:
+        header += bytes([n])
+    elif n < 65536:
+        header += bytes([126]) + struct.pack(">H", n)
+    else:
+        header += bytes([127]) + struct.pack(">Q", n)
+    sock.sendall(header + payload)
+
+
+def _read_exact(sock, n: int) -> bytes:
+    buf = b""
+    while len(buf) < n:
+        chunk = sock.recv(n - len(buf))
+        if not chunk:
+            raise ConnectionError("socket closed")
+        buf += chunk
+    return buf
+
+
+def _ws_recv(sock):
+    """Returns (opcode, payload) or raises ConnectionError."""
+    head = _read_exact(sock, 2)
+    fin = head[0] & 0x80
+    opcode = head[0] & 0x0F
+    masked = head[1] & 0x80
+    length = head[1] & 0x7F
+    if length == 126:
+        length = struct.unpack(">H", _read_exact(sock, 2))[0]
+    elif length == 127:
+        length = struct.unpack(">Q", _read_exact(sock, 8))[0]
+    mask = _read_exact(sock, 4) if masked else None
+    payload = _read_exact(sock, length) if length else b""
+    if mask:
+        payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+    if not fin:
+        # Continuation: accumulate (rare from browsers, but correct).
+        parts = [payload]
+        while True:
+            op2, more = _ws_recv(sock)
+            parts.append(more)
+            if op2 & 0xF0 or op2 == 0x0:
+                break
+        payload = b"".join(parts)
+    return opcode, payload
+
+
+def _read_lsp_message(stream) -> bytes:
+    """Read one Content-Length-framed LSP message, header+body, raw."""
+    raw_headers = b""
+
+    def readline():
+        line = stream.readline()
+        if not line:
+            raise ConnectionError("lsp closed")
+        return line
+
+    length = None
+    while True:
+        line = readline()
+        raw_headers += line
+        if line in (b"\r\n", b"\n", b""):
+            break
+        if line.lower().startswith(b"content-length:"):
+            length = int(line.split(b":", 1)[1].strip())
+    if length is None:
+        raise ValueError("LSP message without Content-Length")
+    body = b""
+    while len(body) < length:
+        chunk = stream.read(length - len(body))
+        if not chunk:
+            raise ConnectionError("lsp closed")
+        body += chunk
+    return raw_headers + body
+
+
+class LspHub:
+    """Single pylsp shared by all WS clients, ids namespaced globally."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._proc = None
+        self._next_id = 1
+        self._routes = {}   # global_id -> (socket, orig_id)
+        self._sockets = set()
+
+    def _ensure_proc(self) -> bool:
+        if self._proc is not None and self._proc.poll() is None:
+            return True
+        if not LSP_ARGV:
+            return False
+        try:
+            self._proc = subprocess.Popen(
+                LSP_ARGV,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                bufsize=0,
+            )
+        except Exception:
+            self._proc = None
+            return False
+        threading.Thread(target=self._pump, daemon=True).start()
+        return True
+
+    def _pump(self):
+        """pylsp stdout -> route by id, broadcast notifications."""
+        proc = self._proc
+        try:
+            while True:
+                raw = _read_lsp_message(proc.stdout)
+                try:
+                    msg = json.loads(raw.split(b"\r\n\r\n", 1)[-1].split(b"\n\n", 1)[-1])
+                except Exception:
+                    continue
+                target = None
+                if isinstance(msg, dict) and "id" in msg:
+                    with self._lock:
+                        target = self._routes.pop(msg["id"], None)
+                    if target is not None:
+                        sock, orig = target
+                        msg["id"] = orig
+                        raw = self._reframe(raw, msg)
+                        try:
+                            _ws_send(sock, raw)
+                        except Exception:
+                            pass
+                        continue
+                # Notification (e.g. textDocument/publishDiagnostics): all.
+                with self._lock:
+                    socks = list(self._sockets)
+                for sock in socks:
+                    try:
+                        _ws_send(sock, raw)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    @staticmethod
+    def _reframe(raw: bytes, msg: dict) -> bytes:
+        body = json.dumps(msg).encode()
+        return (f"Content-Length: {len(body)}\r\n\r\n").encode() + body
+
+    def forward(self, sock, raw: bytes) -> None:
+        """Client bytes -> pylsp, rewriting request ids into global space."""
+        if not self._ensure_proc():
+            raise RuntimeError("no language server (pip install python-lsp-server)")
+        try:
+            head, _, body = raw.partition(b"\r\n\r\n")
+            if not body:
+                head, _, body = raw.partition(b"\n\n")
+            msg = json.loads(body)
+        except Exception:
+            return
+        if isinstance(msg, dict) and "id" in msg:
+            with self._lock:
+                gid = self._next_id
+                self._next_id += 1
+                self._routes[gid] = (sock, msg["id"])
+            msg["id"] = gid
+            raw = self._reframe(raw, msg)
+        with self._lock:
+            proc = self._proc
+        try:
+            proc.stdin.write(raw)
+            proc.stdin.flush()
+        except Exception:
+            pass
+
+    def attach(self, sock) -> None:
+        with self._lock:
+            self._sockets.add(sock)
+
+    def detach(self, sock) -> None:
+        with self._lock:
+            self._sockets.discard(sock)
+            self._routes = {k: v for k, v in self._routes.items() if v[0] is not sock}
+
+
+_HUB = LspHub()
 
 STATIC_DIR = resources.files("py_runner") / "lab_static"
 MIME = {".html": "text/html", ".css": "text/css", ".js": "application/javascript"}
@@ -163,6 +367,64 @@ class LabHandler(KernelHandler):
             return self._send(500, {"error": f"save failed: {e}"})
         return self._send(200, {"saved": True})
 
+    # ── LSP websocket bridge ─────────────────────────────────────────
+    def _handle_lsp(self):
+        """Hijack the socket: browser WS <-> shared pylsp stdio."""
+        key = self.headers.get("Sec-WebSocket-Key")
+        if not key:
+            return self._send(400, {"error": "websocket upgrade required"})
+        try:
+            sock = self.request
+            sock.sendall(
+                ("HTTP/1.1 101 Switching Protocols\r\n"
+                 "Upgrade: websocket\r\n"
+                 "Connection: Upgrade\r\n"
+                 f"Sec-WebSocket-Accept: {_ws_accept(key.strip())}\r\n\r\n").encode()
+            )
+        except Exception:
+            return
+        self.close_connection = False
+        _HUB.attach(sock)
+        try:
+            while True:
+                try:
+                    opcode, payload = _ws_recv(sock)
+                except Exception:
+                    break
+                if opcode == 0x8:  # close
+                    try:
+                        _ws_send(sock, b"", opcode=0x8)
+                    except Exception:
+                        pass
+                    break
+                if opcode == 0x9:  # ping
+                    try:
+                        _ws_send(sock, payload, opcode=0xA)
+                    except Exception:
+                        break
+                    continue
+                if opcode not in (0x1, 0x2):
+                    continue
+                try:
+                    _HUB.forward(sock, payload)
+                except Exception as e:
+                    try:
+                        _ws_send(sock, json.dumps(
+                            {"error": str(e)}).encode())
+                    except Exception:
+                        break
+        finally:
+            _HUB.detach(sock)
+            self.close_connection = True
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
+            try:
+                sock.close()
+            except Exception:
+                pass
+
     # ── routing: /api/* delegates to the kernel handler ──────────────
     def _as_api(self):
         """Strip /api prefix then dispatch to KernelHandler routes."""
@@ -196,11 +458,19 @@ class LabHandler(KernelHandler):
             return self._send_static(name)
         if self.path == "/api/lsp-status":
             if LSP_ARGV:
-                return self._send(200, {"available": True, "command": LSP_ARGV})
+                from urllib.request import pathname2url as _p2u
+
+                return self._send(200, {
+                    "available": True,
+                    "command": LSP_ARGV,
+                    "rootUri": "file://" + _p2u(self.root),
+                })
             return self._send(200, {
                 "available": False,
                 "hint": "pip install python-lsp-server (ships with py-runner-kernel)",
             })
+        if self.path == "/lsp":
+            return self._handle_lsp()
         if self.path == "/api/files" or self.path.startswith("/api/files?"):
             return self._handle_files()
         if self.path == "/api/search" or self.path.startswith("/api/search?"):

@@ -36,6 +36,7 @@ export function renderCells(host, ctx) {
           value: cellSource(cell),
           onChange: function (text) { ctx.onEdit(idx, text); },
           onRun: function () { ctx.onRun(idx); },
+          lsp: ctx.lspFor ? ctx.lspFor(idx) : null,
         });
       })(i);
     } else {
