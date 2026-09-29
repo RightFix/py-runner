@@ -3,6 +3,7 @@
 import ast
 import io
 import json
+import sys
 import threading
 import time
 import traceback
@@ -434,6 +435,8 @@ class Kernel:
             "namespace_vars": len(self._namespace),
             "namespace_bytes_approx": total,
             "is_busy": self.is_busy,
+            "executable": sys.executable,
+            "prefix": sys.prefix,
         }
 
     def _remember(self, value) -> None:

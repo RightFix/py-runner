@@ -11,4 +11,4 @@ wheels/
 
 # Local publish credentials — never commit
 .pypirc
-.pypirc
+.pytest_cache

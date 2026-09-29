@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.3]
+
+- Notebook GUI: `py-runner lab` serves a JupyterLab-like editor (vanilla
+  HTML/CSS/JS, offline) + kernel API in one localhost process. File browser
+  jailed to `--dir`; per-notebook isolated sessions; kernel pill shows the
+  active venv `prefix`. Frontend split by function (`js/api|markdown|outputs|
+  state|session|files|cells|app`, `css/`).
+- Worker stdio loop hardened to pure `readline()` (iterator+readline mixing
+  could stall input replies).
+
 ## [Unreleased]
 
 - `/health` reports the package `version`; server banner no longer hardcodes `0.1.0`.

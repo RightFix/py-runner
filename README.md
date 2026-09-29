@@ -77,6 +77,18 @@ cat cell.py | py-runner
 python -m py_runner -c "1+1"
 ```
 
+## Notebook GUI
+
+```bash
+py-runner lab --port 8000 --dir ./notebooks
+```
+
+JupyterLab-like notebook editor at `http://127.0.0.1:8000`: file browser,
+code/markdown cells, run-all/interrupt, rich outputs, per-notebook isolated
+sessions. Run it from an activated virtualenv and executed code sees that
+env's libraries — the kernel pill shows the active `prefix`. Files are jailed
+to `--dir`; localhost only.
+
 ## Project structure
 
 ```text

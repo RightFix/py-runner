@@ -3,6 +3,7 @@
 from .display import DisplayCollector, _DisplayCollector
 from .kernel import Kernel
 from .magics import MagicHandler
+from .process import ProcessKernel
 from .streams import StreamingBuffer, ThreadRoutedProxy, _StreamingBuffer
 from .utils import _try_import, set_address_space_limit, try_import
 
@@ -10,6 +11,7 @@ __all__ = [
     "DisplayCollector",
     "Kernel",
     "MagicHandler",
+    "ProcessKernel",
     "StreamingBuffer",
     "ThreadRoutedProxy",
     "execute",
@@ -60,9 +62,17 @@ def main(argv=None) -> int:
     import json
     import sys
 
+    # Subcommand first: `py-runner lab ...` (notebook GUI + kernel server).
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw[:1] == ["lab"]:
+        from .lab import main as lab_main
+
+        return lab_main(raw[1:])
+
     parser = argparse.ArgumentParser(
         prog="py-runner",
-        description="Execute Python code and print simplified JSON result.",
+        description="Execute Python code and print simplified JSON result. "
+        "Use `py-runner lab` for the notebook GUI.",
     )
     parser.add_argument("file", nargs="?", help="Python file to run (default: stdin)")
     parser.add_argument(

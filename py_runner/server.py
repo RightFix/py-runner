@@ -18,7 +18,7 @@ import threading
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .kernel import Kernel
+from .process import ProcessKernel
 
 
 def _package_version() -> str:
@@ -37,7 +37,10 @@ MAX_BODY_BYTES = 10 * 1024 * 1024
 
 
 class SessionRegistry:
-    """Thread-safe map of session_id -> Kernel. No expiry by design."""
+    """Thread-safe map of session_id -> process-isolated kernel.
+
+    Each session is its own OS process (ProcessKernel): a crash, hang, or
+    segfault takes only that session. No expiry by design."""
 
     def __init__(self, max_sessions: int = 100):
         self._lock = threading.Lock()
@@ -49,10 +52,10 @@ class SessionRegistry:
             if len(self._sessions) >= self.max_sessions:
                 raise SessionLimitReached(self.max_sessions)
             sid = uuid.uuid4().hex
-            self._sessions[sid] = Kernel(**kernel_kwargs)
+            self._sessions[sid] = ProcessKernel(**kernel_kwargs)
             return sid
 
-    def get(self, sid) -> Kernel | None:
+    def get(self, sid) -> ProcessKernel | None:
         with self._lock:
             return self._sessions.get(sid)
 
@@ -63,6 +66,10 @@ class SessionRegistry:
             return False
         try:
             kernel.interrupt()
+        except Exception:
+            pass
+        try:
+            kernel.close()
         except Exception:
             pass
         return True
