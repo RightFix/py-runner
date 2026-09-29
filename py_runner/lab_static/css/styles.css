@@ -48,6 +48,16 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+#search {
+  margin: 8px 8px 0;
+  background: var(--code-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+#search:focus { outline: 1px solid var(--accent); }
 #file-list li:hover { background: var(--border); }
 #file-list li.active { background: #1f6feb; }
 

@@ -272,7 +272,7 @@ def _serve_dual_stack(host: str, port: int, handler):
     return httpd, []
 
 
-def serve(host: str = "127.0.0.1", port: int = 8000, max_sessions: int = 100):
+def serve(host: str = "localhost", port: int = 8000, max_sessions: int = 100):
     Handler.registry = SessionRegistry(max_sessions=max_sessions)
     httpd, _extra = _serve_dual_stack(host, port, Handler)
     for extra in _extra:
@@ -288,7 +288,7 @@ def main(argv=None) -> int:
         prog="py-runner-serve",
         description="Serve py-runner kernels over HTTP+JSON.",
     )
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--max-sessions", type=int, default=100)
     args = parser.parse_args(argv)

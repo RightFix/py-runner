@@ -3,7 +3,7 @@ import { api } from './api.js';
 import { toOutputs } from './outputs.js';
 import { state, $, cellSource } from './state.js';
 import { ensureSession, interruptSession } from './session.js';
-import { refreshFiles, fetchNotebook, saveNotebook } from './files.js';
+import { refreshFiles, fetchNotebook, saveNotebook, searchNotebooks, renderSearchResults } from './files.js';
 import { renderCells } from './cells.js';
 
 function markDirty() {
@@ -33,7 +33,12 @@ function draw() {
     },
   });
   var ul = $('file-list');
-  if (ul) refreshFiles(ul, state.path, openNotebook).catch(function () { /* ignore */ });
+  if (ul) refreshFiles(ul, state.dir, state.path, openNotebook, onEnterDir).catch(function () { /* ignore */ });
+}
+
+function onEnterDir(dir) {
+  state.dir = dir;
+  draw();
 }
 
 function setToolbar(on) {
@@ -108,7 +113,7 @@ $('new-nb').onclick = async function () {
   var name = prompt('Notebook name', 'Untitled.ipynb');
   if (!name) return;
   if (!/\.ipynb$/i.test(name)) name += '.ipynb';
-  state.path = name;
+  state.path = state.dir ? state.dir + '/' + name : name;
   state.nb = { cells: [], metadata: {}, nbformat: 4, nbformat_minor: 5 };
   state.session = null;
   $('filename').textContent = name;
@@ -118,6 +123,17 @@ $('new-nb').onclick = async function () {
 };
 
 draw();
-refreshFiles($('file-list'), null, openNotebook).catch(function () {
+var searchTimer = null;
+$('search').addEventListener('input', function (e) {
+  clearTimeout(searchTimer);
+  var q = e.target.value.trim();
+  if (!q) { draw(); return; }
+  searchTimer = setTimeout(function () {
+    searchNotebooks(q).then(function (r) {
+      renderSearchResults($('file-list'), r.results || [], r.truncated, openNotebook);
+    }).catch(function () { /* ignore */ });
+  }, 250);
+});
+refreshFiles($('file-list'), state.dir, null, openNotebook, onEnterDir).catch(function () {
   $('kernel-pill').textContent = '● backend unreachable';
 });

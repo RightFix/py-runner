@@ -1,5 +1,5 @@
 /* Shared notebook state + DOM helpers. Leaf module: imports nothing. */
-export var state = { path: null, nb: null, session: null, running: -1, dirty: false };
+export var state = { path: null, nb: null, session: null, running: -1, dirty: false, dir: '' };
 
 export function $(id) { return document.getElementById(id); }
 

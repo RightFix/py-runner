@@ -51,6 +51,7 @@ class LabHandler(KernelHandler):
         return abs_path
 
     def _handle_files(self):
+        """Immediate children of ?path=: subdirs + .ipynb files (Jupyter-like)."""
         query = parse_qs(urlparse(self.path).query)
         sub = (query.get("path") or [""])[0]
         base = self._resolve(sub) or self.root
@@ -61,13 +62,42 @@ class LabHandler(KernelHandler):
         except Exception as e:
             return self._send(500, {"error": f"list failed: {e}"})
         rel = os.path.relpath(base, self.root)
-        out = []
+        rel = "" if rel == "." else rel
+        dirs, files = [], []
         for n in names:
+            if n.startswith("."):
+                continue
             full = os.path.join(base, n)
-            p = n if rel == "." else f"{rel}/{n}"
-            out.append({"name": n, "path": p, "dir": os.path.isdir(full)})
-        notebooks = sorted([e["path"] for e in out if e["path"].endswith(".ipynb")])
-        return self._send(200, {"files": notebooks, "root": self.root})
+            p = f"{rel}/{n}" if rel else n
+            if os.path.isdir(full):
+                dirs.append({"name": n, "path": p})
+            elif n.endswith(".ipynb"):
+                files.append(p)
+        return self._send(200, {"path": rel, "dirs": sorted(dirs, key=lambda d: d["name"]),
+                               "files": sorted(files), "root": self.root})
+
+    def _handle_search(self, limit: int = 200, max_dirs: int = 5000):
+        """Recursive .ipynb search under root: GET /api/search?q=text."""
+        query = parse_qs(urlparse(self.path).query)
+        q = (query.get("q") or [""])[0].strip().lower()
+        if not q:
+            return self._send(400, {"error": "need ?q=text"})
+        results = []
+        seen_dirs = 0
+        for dirpath, dirnames, filenames in os.walk(self.root, followlinks=False):
+            dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+            seen_dirs += 1
+            if seen_dirs > max_dirs:
+                break
+            for fn in sorted(filenames):
+                if not fn.endswith(".ipynb") or fn.startswith("."):
+                    continue
+                rel = os.path.relpath(os.path.join(dirpath, fn), self.root)
+                if q in rel.lower():
+                    results.append(rel)
+                    if len(results) >= limit:
+                        return self._send(200, {"results": results, "truncated": True})
+        return self._send(200, {"results": results, "truncated": False})
 
     def _handle_file_get(self):
         query = parse_qs(urlparse(self.path).query)
@@ -141,6 +171,8 @@ class LabHandler(KernelHandler):
             return self._send_static(name)
         if self.path == "/api/files" or self.path.startswith("/api/files?"):
             return self._handle_files()
+        if self.path == "/api/search" or self.path.startswith("/api/search?"):
+            return self._handle_search()
         if self.path == "/api/file" or self.path.startswith("/api/file?"):
             return self._handle_file_get()
         if self.path == "/api" or self.path.startswith("/api/"):
@@ -169,7 +201,7 @@ class LabHandler(KernelHandler):
         return KernelHandler.do_OPTIONS(self)
 
 
-def serve_lab(host: str = "127.0.0.1", port: int = 8000,
+def serve_lab(host: str = "localhost", port: int = 8000,
               root: str = ".", max_sessions: int = 100):
     import threading
 
@@ -189,7 +221,7 @@ def main(argv=None) -> int:
         prog="py-runner lab",
         description="Notebook GUI (JupyterLab-like) + kernel server.",
     )
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--dir", default=".",
                         help="Notebook root directory (jailed)")

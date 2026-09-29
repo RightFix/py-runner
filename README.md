@@ -83,7 +83,7 @@ python -m py_runner -c "1+1"
 py-runner lab --port 8000 --dir ./notebooks
 ```
 
-JupyterLab-like notebook editor at `http://127.0.0.1:8000`: file browser,
+JupyterLab-like notebook editor at `http://localhost:8000`: file browser,
 code/markdown cells, run-all/interrupt, rich outputs, per-notebook isolated
 sessions. Run it from an activated virtualenv and executed code sees that
 env's libraries — the kernel pill shows the active `prefix`. Files are jailed
@@ -113,7 +113,7 @@ uv publish --publish-url https://test.pypi.org/legacy/  # trial run
 ## HTTP server
 
 ```bash
-py-runner-serve --host 127.0.0.1 --port 8000 --max-sessions 100
+py-runner-serve --host localhost --port 8000 --max-sessions 100
 ```
 
 ```bash
