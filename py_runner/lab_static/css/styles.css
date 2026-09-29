@@ -129,6 +129,10 @@ button:disabled { opacity: 0.4; cursor: default; }
   resize: vertical;
 }
 .cell textarea:focus { outline: 1px solid var(--accent); }
+.cm-host { border-top: 1px solid var(--border); text-align: left; }
+.cm-host .cm-editor { height: auto; }
+.cm-host .cm-editor.cm-focused { outline: 1px solid var(--accent); }
+.cm-host .cm-scroller { max-height: 480px; }
 .prompt { min-width: 64px; font-family: ui-monospace, Menlo, Consolas, monospace; }
 
 .outputs { border-top: 1px solid var(--border); }

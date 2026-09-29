@@ -1,7 +1,9 @@
-/* Cell DOM rendering. Pure w.r.t. app state: reads via ctx, acts via ctx. */
+/* Cell DOM rendering. Code cells use CodeMirror (bundled vendor/cm.js);
+ * markdown cells keep a plain textarea. Pure w.r.t. app state. */
 import { md } from './markdown.js';
 import { renderOutput } from './outputs.js';
 import { cellSource } from './state.js';
+import { createPythonEditor } from './vendor/cm.js';
 
 /* ctx: { cells, running, onRun(i), onInterrupt(), onDelete(i), onToggleMd(i), onEdit(i, text) } */
 export function renderCells(host, ctx) {
@@ -25,6 +27,17 @@ export function renderCells(host, ctx) {
       prev.className = 'md-preview';
       prev.innerHTML = md(cellSource(cell));
       el.appendChild(prev);
+    } else if (cell.cell_type === 'code') {
+      var cmHost = document.createElement('div');
+      cmHost.className = 'cm-host';
+      el.appendChild(cmHost);
+      (function (idx) {
+        createPythonEditor(cmHost, {
+          value: cellSource(cell),
+          onChange: function (text) { ctx.onEdit(idx, text); },
+          onRun: function () { ctx.onRun(idx); },
+        });
+      })(i);
     } else {
       var ta = document.createElement('textarea');
       ta.value = cellSource(cell);

@@ -12,3 +12,4 @@ wheels/
 # Local publish credentials — never commit
 .pypirc
 .pytest_cache
+frontend/node_modules/
