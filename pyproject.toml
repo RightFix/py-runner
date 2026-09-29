@@ -23,7 +23,7 @@ classifiers = [
     "Topic :: Software Development :: Interpreters",
 ]
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["python-lsp-server>=1.10"]
 
 [project.scripts]
 py-runner = "py_runner:main"

@@ -7,6 +7,9 @@ files are served from ``--dir`` with a traversal guard. Standard library only.
 
 import json
 import os
+import shutil
+import subprocess
+import sys
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
 
@@ -16,6 +19,28 @@ from .server import (
     MAX_BODY_BYTES,
     _serve_dual_stack,
 )
+
+
+def find_lsp():
+    """Locate a Python language server. Returns argv or None (never raises).
+
+    `python-lsp-server` ships as a hard dependency, but installs can be
+    partial (`--no-deps`) or broken — the GUI degrades to plain cells.
+    """
+    exe = shutil.which("pylsp")
+    if exe:
+        return [exe]
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pylsp", "--version"],
+            capture_output=True, timeout=10,
+        )
+        return [sys.executable, "-m", "pylsp"]
+    except Exception:
+        return None
+
+
+LSP_ARGV = find_lsp()
 
 STATIC_DIR = resources.files("py_runner") / "lab_static"
 MIME = {".html": "text/html", ".css": "text/css", ".js": "application/javascript"}
@@ -169,6 +194,13 @@ class LabHandler(KernelHandler):
             if ".." in name or "\\" in name:
                 return self._send(404, {"error": "not found"})
             return self._send_static(name)
+        if self.path == "/api/lsp-status":
+            if LSP_ARGV:
+                return self._send(200, {"available": True, "command": LSP_ARGV})
+            return self._send(200, {
+                "available": False,
+                "hint": "pip install python-lsp-server (ships with py-runner-kernel)",
+            })
         if self.path == "/api/files" or self.path.startswith("/api/files?"):
             return self._handle_files()
         if self.path == "/api/search" or self.path.startswith("/api/search?"):
