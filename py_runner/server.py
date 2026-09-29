@@ -20,6 +20,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .kernel import Kernel
 
+
+def _package_version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("py-runner-kernel")
+    except Exception:
+        return "dev"
+
+
+VERSION = _package_version()
+
 # Refuse absurd bodies before parsing (10 MB of code is never legit).
 MAX_BODY_BYTES = 10 * 1024 * 1024
 
@@ -79,7 +91,7 @@ class SessionLimitReached(Exception):
 
 class Handler(BaseHTTPRequestHandler):
     registry: SessionRegistry = SessionRegistry()
-    server_version = "py-runner-serve/0.1.0"
+    server_version = "py-runner-serve/" + VERSION
     protocol_version = "HTTP/1.1"
 
     # ── helpers ──────────────────────────────────────────────────────
@@ -131,7 +143,10 @@ class Handler(BaseHTTPRequestHandler):
     # ── routing ──────────────────────────────────────────────────────
     def do_GET(self):
         if self.path == "/health":
-            return self._send(200, {"status": "ok", "sessions": len(self.registry)})
+            return self._send(
+                200,
+                {"status": "ok", "version": VERSION, "sessions": len(self.registry)},
+            )
         if self.path == "/sessions":
             return self._send(200, {"sessions": self.registry.list()})
         if self.path.startswith("/sessions/") and self.path.endswith("/stats"):

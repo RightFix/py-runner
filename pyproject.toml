@@ -6,9 +6,10 @@ readme = "README.md"
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE*"]
 authors = [
-    { name = "RightFix", email = "righteousnessude@gmail.com" }
+    { name = "Rightousness Ude", email = "righteousnessude@gmail.com" }
 ]
 keywords = ["jupyter", "kernel", "repl", "code-execution", "data-science"]
+urls = { Homepage = "https://github.com/RightFix/py-runner", Repository = "https://github.com/RightFix/py-runner.git", Issues = "https://github.com/RightFix/py-runner/issues" }
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
