@@ -14,10 +14,12 @@ deliberately no idle timeout. Bound the blast radius with --max-sessions.
 """
 
 import json
+import socket
 import threading
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from .kernel import Kernel
 from .process import ProcessKernel
 
 
@@ -236,10 +238,45 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(200, {"interrupted": True})
 
 
+def _serve_dual_stack(host: str, port: int, handler):
+    """Serve loopback over IPv4+IPv6.
+
+    Browsers often resolve `localhost` to ::1 first while other clients
+    use 127.0.0.1. One socket cannot cover both here (binding ::1 forces
+    V6ONLY and post-bind changes are rejected), so bind one loopback
+    socket per family sharing the same handler/registry.
+    Returns (primary, secondaries).
+    """
+
+    class _Loopback6(ThreadingHTTPServer):
+        address_family = socket.AF_INET6
+
+    if host in ("localhost", "127.0.0.1", "::1"):
+        try:
+            six = _Loopback6(("::1", port), handler)
+            six.daemon_threads = True
+            # Ephemeral (:0) ports differ per socket — pin v4 to v6's port.
+            bound = six.server_address[1] if port == 0 else port
+            four = ThreadingHTTPServer(("127.0.0.1", bound), handler)
+            four.daemon_threads = True
+            return six, [four]
+        except Exception:
+            try:
+                six.server_close()
+            except Exception:
+                pass
+            pass
+        host = "127.0.0.1"
+    httpd = ThreadingHTTPServer((host, port), handler)
+    httpd.daemon_threads = True
+    return httpd, []
+
+
 def serve(host: str = "127.0.0.1", port: int = 8000, max_sessions: int = 100):
     Handler.registry = SessionRegistry(max_sessions=max_sessions)
-    httpd = ThreadingHTTPServer((host, port), Handler)
-    httpd.daemon_threads = True
+    httpd, _extra = _serve_dual_stack(host, port, Handler)
+    for extra in _extra:
+        threading.Thread(target=extra.serve_forever, daemon=True).start()
     return httpd
 
 

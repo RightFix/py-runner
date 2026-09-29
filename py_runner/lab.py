@@ -10,7 +10,12 @@ import os
 from importlib import resources
 from urllib.parse import parse_qs, urlparse
 
-from .server import Handler as KernelHandler, SessionRegistry, MAX_BODY_BYTES
+from .server import (
+    Handler as KernelHandler,
+    SessionRegistry,
+    MAX_BODY_BYTES,
+    _serve_dual_stack,
+)
 
 STATIC_DIR = resources.files("py_runner") / "lab_static"
 MIME = {".html": "text/html", ".css": "text/css", ".js": "application/javascript"}
@@ -32,6 +37,7 @@ class LabHandler(KernelHandler):
         self.send_header("Content-Type", MIME.get(ext, "application/octet-stream"))
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         self.wfile.write(data)
 
@@ -105,8 +111,9 @@ class LabHandler(KernelHandler):
     # ── routing: /api/* delegates to the kernel handler ──────────────
     def _as_api(self):
         """Strip /api prefix then dispatch to KernelHandler routes."""
-        if self.path == "/api" or self.path.startswith("/api/"):
-            rest = self.path[len("/api"):] or "/"
+        path = urlparse(self.path).path
+        if path == "/api" or path.startswith("/api/"):
+            rest = path[len("/api"):] or "/"
         else:
             return None
         saved = self.path
@@ -164,12 +171,13 @@ class LabHandler(KernelHandler):
 
 def serve_lab(host: str = "127.0.0.1", port: int = 8000,
               root: str = ".", max_sessions: int = 100):
-    from http.server import ThreadingHTTPServer
+    import threading
 
     LabHandler.root = os.path.realpath(root)
     LabHandler.registry = SessionRegistry(max_sessions=max_sessions)
-    httpd = ThreadingHTTPServer((host, port), LabHandler)
-    httpd.daemon_threads = True
+    httpd, extra = _serve_dual_stack(host, port, LabHandler)
+    for srv in extra:
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
     return httpd
 
 
