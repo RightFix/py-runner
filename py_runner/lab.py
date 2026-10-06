@@ -531,8 +531,13 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     httpd = serve_lab(args.host, args.port, args.dir, args.max_sessions)
-    print(f"py-runner lab on http://{args.host}:{args.port} "
-          f"(dir={os.path.realpath(args.dir)})", flush=True)
+    from .server import VERSION
+
+    lsp_state = "ready" if LSP_ARGV else "missing — pip install python-lsp-server"
+    print(f"py-runner lab {VERSION} (Python {sys.version.split()[0]})")
+    print(f"Serving notebooks from {os.path.realpath(args.dir)} (jailed)")
+    print(f" * LSP {lsp_state}")
+    print(f" * Running on http://{args.host}:{args.port}/ (CTRL+C to quit)", flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

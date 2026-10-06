@@ -15,11 +15,12 @@ deliberately no idle timeout. Bound the blast radius with --max-sessions.
 
 import json
 import socket
+import sys
 import threading
+import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .kernel import Kernel
 from .kernel import Kernel
 
 
@@ -143,8 +144,33 @@ class Handler(BaseHTTPRequestHandler):
             return None, "JSON body must be an object"
         return data, None
 
-    def log_message(self, fmt, *args):  # quieter than BaseHTTPRequestHandler
-        pass
+    def handle_one_request(self):
+        self._req_start = time.perf_counter()
+        return super().handle_one_request()
+
+    def log_message(self, fmt, *args):
+        # Django runserver style: [29/Sep/2026 12:00:01] "GET /x HTTP/1.1" 200 58
+        # BaseHTTPRequestHandler calls us as log_message('"%s" %s %s', requestline, code, size).
+        try:
+            requestline, code, size = args[0], str(args[1]), str(args[2])
+        except Exception:
+            return
+        elapsed = time.perf_counter() - getattr(self, "_req_start", time.perf_counter())
+        slow = f" ({elapsed:.2f}s)" if elapsed > 1.0 else ""
+        stamp = time.strftime("%d/%b/%Y %H:%M:%S", time.localtime())
+        line = f'[{stamp}] "{requestline}" {code} {size}{slow}'
+        try:
+            if sys.stderr.isatty():
+                if code.startswith("2"):
+                    line = f"\x1b[32m{line}\x1b[0m"
+                elif code.startswith("4"):
+                    line = f"\x1b[33m{line}\x1b[0m"
+                elif code.startswith("5"):
+                    line = f"\x1b[31m{line}\x1b[0m"
+            sys.stderr.write(line + "\n")
+            sys.stderr.flush()
+        except Exception:
+            pass
 
     # ── routing ──────────────────────────────────────────────────────
     def do_GET(self):
@@ -291,8 +317,9 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     httpd = serve(args.host, args.port, args.max_sessions)
-    print(f"py-runner-serve on http://{args.host}:{args.port} "
-          f"(max_sessions={args.max_sessions})", flush=True)
+    print(f"py-runner-serve {VERSION} (Python {sys.version.split()[0]})")
+    print(f" * Sessions capped at {args.max_sessions}, no idle timeout")
+    print(f" * Running on http://{args.host}:{args.port}/ (CTRL+C to quit)", flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
