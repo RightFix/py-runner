@@ -49,12 +49,15 @@ function draw() {
   renderCells($('cells'), {
     cells: state.nb ? state.nb.cells : [],
     running: state.running,
+    focused: state.focused,
     onRun: runCell,
     onInterrupt: interrupt,
     lspFor: lspFor,
+    onFocus: function (i) { state.focused = i; },
     onDelete: function (i) {
       if (!confirm('Delete cell?')) return;
       state.nb.cells.splice(i, 1);
+      if (state.focused === i) state.focused = -1;
       markDirty();
       draw();
     },
@@ -91,6 +94,7 @@ async function openNotebook(path) {
   state.nb = nb;
   state.session = null;
   state.lsp = undefined;
+  state.focused = -1;
   state.dirty = false;
   $('filename').textContent = path.split('/').pop();
   setToolbar(true);

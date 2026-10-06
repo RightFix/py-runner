@@ -101,8 +101,10 @@ export function createPythonEditor(parent, opts) {
       }
     }),
     EditorView.theme({
-      '&': { backgroundColor: '#0a0d12', color: '#e6edf3', fontSize: '13px' },
-      '.cm-content': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' },
+      '&': { backgroundColor: '#0a0d12', color: '#e6edf3', fontSize: '13px', caretColor: '#e6edf3' },
+      '.cm-content': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', caretColor: '#e6edf3' },
+      '.cm-cursor': { borderLeftColor: '#e6edf3', borderLeftWidth: '2px' },
+      '.cm-dropCursor': { borderLeftColor: '#e6edf3' },
       '.cm-gutters': { backgroundColor: '#0a0d12', color: '#8b949e', border: 'none' },
       '.cm-activeLineGutter': { backgroundColor: 'transparent' },
     }),
@@ -154,6 +156,9 @@ export function createPythonEditor(parent, opts) {
     extensions: extensions,
   })});
   entry.view = view;
+  view.dom.addEventListener('focusin', function () {
+    if (opts.onFocus) opts.onFocus();
+  });
 
   if (lsp) {
     lsp.client.didOpen(lsp.uri, view.state.doc.toString()).catch(function () {});

@@ -5,7 +5,8 @@ import { renderOutput } from './outputs.js';
 import { cellSource } from './state.js';
 import { createPythonEditor } from './vendor/cm.js';
 
-/* ctx: { cells, running, onRun(i), onInterrupt(), onDelete(i), onToggleMd(i), onEdit(i, text) } */
+/* ctx: { cells, running, focused, onRun(i), onInterrupt(), onDelete(i),
+ *        onToggleMd(i), onEdit(i, text), onFocus(i), lspFor(i) } */
 export function renderCells(host, ctx) {
   host.innerHTML = '';
   ctx.cells.forEach(function (cell, i) {
@@ -32,12 +33,14 @@ export function renderCells(host, ctx) {
       cmHost.className = 'cm-host';
       el.appendChild(cmHost);
       (function (idx) {
-        createPythonEditor(cmHost, {
+        var ed = createPythonEditor(cmHost, {
           value: cellSource(cell),
           onChange: function (text) { ctx.onEdit(idx, text); },
           onRun: function () { ctx.onRun(idx); },
+          onFocus: function () { ctx.onFocus(idx); },
           lsp: ctx.lspFor ? ctx.lspFor(idx) : null,
         });
+        if (ctx.focused === idx) ed.focus();
       })(i);
     } else {
       var ta = document.createElement('textarea');
