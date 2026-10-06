@@ -283,9 +283,9 @@ class LabHandler(KernelHandler):
         """Immediate children of ?path=: subdirs + .ipynb files (Jupyter-like)."""
         query = parse_qs(urlparse(self.path).query)
         sub = (query.get("path") or [""])[0]
-        base = self._resolve(sub) or self.root
-        if not os.path.isdir(base):
-            return self._send(400, {"error": "not a directory"})
+        base = self.root if not sub else self._resolve(sub)
+        if base is None or not os.path.isdir(base):
+            return self._send(400, {"error": "bad ?path=: outside root or not a directory"})
         try:
             names = sorted(os.listdir(base))
         except Exception as e:
@@ -494,9 +494,6 @@ class LabHandler(KernelHandler):
     def do_PUT(self):
         if self.path == "/api/file" or self.path.startswith("/api/file?"):
             return self._handle_file_put()
-        if self.path == "/api" or self.path.startswith("/api/"):
-            # PUT has no kernel route; answer preflight-style CORS only.
-            return self._send(404, {"error": "not found"})
         return self._send(404, {"error": "not found"})
 
     def do_OPTIONS(self):
