@@ -4,11 +4,28 @@
 
 - Notebook GUI: `py-runner lab` serves a JupyterLab-like editor (vanilla
   HTML/CSS/JS, offline) + kernel API in one localhost process. File browser
-  jailed to `--dir`; per-notebook isolated sessions; kernel pill shows the
-  active venv `prefix`. Frontend split by function (`js/api|markdown|outputs|
-  state|session|files|cells|app`, `css/`).
+  jailed to `--dir` with subdirectories, recursive search, and save;
+  per-notebook isolated sessions; kernel pill shows the active venv `prefix`.
+  Frontend split by function (`js/api|markdown|outputs|state|session|files|
+  cells|app`, `css/`).
+- CodeMirror cell editors (bundled at build time, no runtime deps) with
+  auto-close brackets, `Ctrl+Enter` to run, visible caret, focus retention
+  across re-renders.
+- LSP integration: `/lsp` WebSocket bridge to one shared `pylsp` process,
+  per-cell documents, completions on typing, hover docs, lint gutter with
+  pushed diagnostics, graceful plain-editor fallback. `python-lsp-server`
+  is now a (floor-pinned) hard dependency; `/api/lsp-status` reports
+  availability and the workspace root.
+- Dual-stack localhost: IPv4 + IPv6 loopback sockets so `localhost` and
+  `127.0.0.1` URLs both work; `Cache-Control: no-cache` on GUI assets;
+  query strings no longer break API routing.
 - Worker stdio loop hardened to pure `readline()` (iterator+readline mixing
   could stall input replies).
+- Django-style request logs (`[day/Mon/year hh:mm:ss] "METHOD path" status`)
+  with slow-execute durations and TTY-only colors; startup banners report
+  version, dir, LSP state, and URL.
+- Subprocess-per-session isolation reverted: sessions run in-process again
+  (`process.py`/`worker.py` kept dormant); same for its test suite.
 
 ## [Unreleased]
 
