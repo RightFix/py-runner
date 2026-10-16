@@ -24,13 +24,10 @@
 - Django-style request logs (`[day/Mon/year hh:mm:ss] "METHOD path" status`)
   with slow-execute durations and TTY-only colors; startup banners report
   version, dir, LSP state, and URL.
+- `/health` reports the package `version` (no more hardcoded banner);
+  PyPI metadata gains Homepage/Repository/Issues links.
 - Subprocess-per-session isolation reverted: sessions run in-process again
   (`process.py`/`worker.py` kept dormant); same for its test suite.
-
-## [Unreleased]
-
-- `/health` reports the package `version`; server banner no longer hardcodes `0.1.0`.
-- PyPI metadata: Homepage/Repository/Issues links.
 
 ## [0.1.2]
 
